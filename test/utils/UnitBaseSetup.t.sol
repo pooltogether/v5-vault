@@ -54,7 +54,7 @@ contract UnitBaseSetup is Test, Helpers {
 
   /* ============ Setup ============ */
 
-  function setUp() public {
+  function setUp() public virtual {
     (owner, ownerPrivateKey) = makeAddrAndKey("Owner");
     (manager, managerPrivateKey) = makeAddrAndKey("Manager");
     (alice, alicePrivateKey) = makeAddrAndKey("Alice");

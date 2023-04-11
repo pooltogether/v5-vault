@@ -106,6 +106,22 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
    */
   event Sponsor(address indexed caller, address indexed receiver, uint256 assets, uint256 shares);
 
+  /**
+   * @notice Emitted when a user migrates from this Vault to another one.
+   * @param fromVault Address of this Vault
+   * @param toVault Address of the receiving Vault
+   * @param caller Address that called the function and for which funds are migrated
+   * @param assets Amount of assets migrated to `toVault`
+   * @param shares Amount of shares migrated to `toVault`
+   */
+  event MigrateToVault(
+    Vault indexed fromVault,
+    Vault indexed toVault,
+    address indexed caller,
+    uint256 assets,
+    uint256 shares
+  );
+
   /* ============ Variables ============ */
 
   /// @notice Address of the TwabController used to keep track of balances.
@@ -175,13 +191,14 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
     address _owner
   ) ERC4626(_asset) ERC20(_name, _symbol) ERC20Permit(_name) Ownable(_owner) {
     require(address(twabController_) != address(0), "Vault/twabCtrlr-not-zero-address");
-    require(address(yieldVault_) != address(0), "Vault/YV-not-zero-address");
     require(address(prizePool_) != address(0), "Vault/PP-not-zero-address");
     require(address(_owner) != address(0), "Vault/owner-not-zero-address");
+    require(address(yieldVault_) != address(0), "Vault/YV-not-zero-address");
+    _requireSameUnderlyingAsset(yieldVault_.asset());
 
+    _prizePool = prizePool_;
     _twabController = twabController_;
     _yieldVault = yieldVault_;
-    _prizePool = prizePool_;
 
     _setClaimer(claimer_);
     _setYieldFeeRecipient(yieldFeeRecipient_);
@@ -474,6 +491,42 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
     return true;
   }
 
+  function redeemToVault(Vault _toVault, uint256 _shares) external {
+    require(address(_toVault) != address(this), "Vault/migrate-to-same-vault");
+    require(_shares != 0, "Vault/shares-gt-zero");
+
+    _requireSameUnderlyingAsset(_toVault.asset());
+
+    Vault _fromVault = Vault(address(this));
+
+    if (_toVault.yieldVault() == address(_yieldVault)) {
+      _burn(msg.sender, _shares);
+
+      // conversion from this vault shares to `_toVault` shares
+      uint256 _toShares = (_toVault.convertToShares(1) * _shares) / convertToShares(1);
+
+      _toVault.migrateFromVault(_fromVault, msg.sender, _toShares);
+
+      emit MigrateToVault(_fromVault, _toVault, msg.sender, convertToAssets(_shares), _shares);
+    } else {
+      uint256 _assetBalanceBefore = IERC20(asset()).balanceOf(address(this));
+
+      redeem(_shares, address(this), msg.sender);
+
+      uint256 _assets = IERC20(asset()).balanceOf(address(this)) - _assetBalanceBefore;
+      _toVault.deposit(_assets, msg.sender);
+
+      emit MigrateToVault(_fromVault, _toVault, msg.sender, _assets, _shares);
+    }
+  }
+
+  function migrateFromVault(Vault _fromVault, address _receiver, uint256 _shares) external {
+    require(msg.sender == address(_fromVault), "Vault/caller-not-fromVault");
+    require(_receiver != address(0), "Vault/receiver-not-zero-address");
+
+    _mint(_receiver, _shares);
+  }
+
   /// @inheritdoc ILiquidationSource
   function targetOf(address _token) external view returns (address) {
     require(_token == _liquidationPair.tokenIn(), "Vault/target-token-unsupported");
@@ -683,6 +736,11 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
   }
 
   /* ============ Internal Functions ============ */
+
+  /* ============ Require ============ */
+  function _requireSameUnderlyingAsset(address _asset) internal {
+    require(_asset == asset(), "Vault/different-underlying-asset");
+  }
 
   /**
    * @notice Total amount of assets managed by this Vault.

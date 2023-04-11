@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
-import "forge-std/Test.sol";
+import { Test } from "forge-std/Test.sol";
 
 import { ERC20Mock } from "openzeppelin/mocks/ERC20Mock.sol";
 
@@ -20,14 +20,20 @@ contract VaultFactoryTest is Test {
   /* ============ Variables ============ */
   VaultFactory public vaultFactory;
 
-  ERC20Mock public asset = new ERC20Mock();
+  ERC20Mock public underlyingAsset = new ERC20Mock();
   string public name = "PoolTogether aEthDAI Yield (PTaEthDAIY)";
   string public symbol = "PTaEthDAIY";
 
   TwabController public twabController =
     TwabController(address(0xDEBef0AD51fEF36a8ea13eEDA6B60Da2fef675cD));
 
-  YieldVault public yieldVault = YieldVault(address(0xc24F43A638E2c32995108415fb3EB402Cd675580));
+  YieldVault public yieldVault =
+    new YieldVault(
+      address(underlyingAsset),
+      "PoolTogether aEthDAI Yield (PTaEthDAIY)",
+      "PTaEthDAIY"
+    );
+
   PrizePool public prizePool = PrizePool(address(0x46fdfAdF967526047175693C751c920f786248C9));
   Claimer public claimer = Claimer(address(0xB6719828701798673852BceCadB764aaf26e8814));
 
@@ -45,7 +51,7 @@ contract VaultFactoryTest is Test {
     emit NewFactoryVault(Vault(_vault), vaultFactory);
 
     _vault = vaultFactory.deployVault(
-      asset,
+      underlyingAsset,
       name,
       symbol,
       twabController,
