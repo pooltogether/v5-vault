@@ -108,14 +108,12 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
 
   /**
    * @notice Emitted when a user migrates from this Vault to another one.
-   * @param fromVault Address of this Vault
    * @param toVault Address of the receiving Vault
    * @param caller Address that called the function and for which funds are migrated
    * @param assets Amount of assets migrated to `toVault`
    * @param shares Amount of shares migrated to `toVault`
    */
   event MigrateToVault(
-    Vault indexed fromVault,
     Vault indexed toVault,
     address indexed caller,
     uint256 assets,
@@ -491,40 +489,23 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
     return true;
   }
 
-  function redeemToVault(Vault _toVault, uint256 _shares) external {
-    require(address(_toVault) != address(this), "Vault/migrate-to-same-vault");
-    require(_shares != 0, "Vault/shares-gt-zero");
-
-    _requireSameUnderlyingAsset(_toVault.asset());
-
-    Vault _fromVault = Vault(address(this));
-
-    if (_toVault.yieldVault() == address(_yieldVault)) {
-      _burn(msg.sender, _shares);
-
-      // conversion from this vault shares to `_toVault` shares
-      uint256 _toShares = (_toVault.convertToShares(1) * _shares) / convertToShares(1);
-
-      _toVault.migrateFromVault(_fromVault, msg.sender, _toShares);
-
-      emit MigrateToVault(_fromVault, _toVault, msg.sender, convertToAssets(_shares), _shares);
-    } else {
-      uint256 _assetBalanceBefore = IERC20(asset()).balanceOf(address(this));
-
-      redeem(_shares, address(this), msg.sender);
-
-      uint256 _assets = IERC20(asset()).balanceOf(address(this)) - _assetBalanceBefore;
-      _toVault.deposit(_assets, msg.sender);
-
-      emit MigrateToVault(_fromVault, _toVault, msg.sender, _assets, _shares);
-    }
+  function approveToVault(Vault _toVault) external onlyOwner {
+    IERC20(asset()).approve(address(_toVault), type(uint256).max);
   }
 
-  function migrateFromVault(Vault _fromVault, address _receiver, uint256 _shares) external {
-    require(msg.sender == address(_fromVault), "Vault/caller-not-fromVault");
-    require(_receiver != address(0), "Vault/receiver-not-zero-address");
+  function redeemToVault(Vault _toVault, uint256 _shares) external {
+    require(address(_toVault) != address(this), "Vault/migrate-to-same-vault");
+    _requireSameUnderlyingAsset(_toVault.asset());
 
-    _mint(_receiver, _shares);
+    IERC20 _asset = IERC20(asset());
+    uint256 _assetBalanceBefore = _asset.balanceOf(address(this));
+
+    redeem(_shares, address(this), msg.sender);
+
+    uint256 _assets = _asset.balanceOf(address(this)) - _assetBalanceBefore;
+    _toVault.deposit(_assets, msg.sender);
+
+    emit MigrateToVault(_toVault, msg.sender, _assets, _shares);
   }
 
   /// @inheritdoc ILiquidationSource
@@ -738,7 +719,7 @@ contract Vault is ERC4626, ERC20Permit, ILiquidationSource, Ownable {
   /* ============ Internal Functions ============ */
 
   /* ============ Require ============ */
-  function _requireSameUnderlyingAsset(address _asset) internal {
+  function _requireSameUnderlyingAsset(address _asset) internal view {
     require(_asset == asset(), "Vault/different-underlying-asset");
   }
 

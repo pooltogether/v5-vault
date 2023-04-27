@@ -1,26 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.17;
 
-import { UnitBaseSetup, IERC20, PrizePool, Vault } from "test/utils/UnitBaseSetup.t.sol";
+import { UnitBaseSetup, IERC20, PrizePool, VaultMock } from "test/utils/UnitBaseSetup.t.sol";
 
 contract VaultMigrateTest is UnitBaseSetup {
   /* ============ Events ============ */
   event MigrateToVault(
-    Vault indexed fromVault,
-    Vault indexed toVault,
+    VaultMock indexed toVault,
     address indexed caller,
     uint256 assets,
     uint256 shares
   );
 
   /* ============ Variables ============ */
-  Vault public toVault;
+  VaultMock public toVault;
 
   /* ============ Setup ============ */
   function setUp() public override {
     super.setUp();
 
-    toVault = new Vault(
+    toVault = new VaultMock(
       underlyingAsset,
       vaultName,
       vaultSymbol,
@@ -38,6 +37,8 @@ contract VaultMigrateTest is UnitBaseSetup {
 
   /* ============ Withdraw ============ */
   function testRedeemToVaultSameYieldVault() external {
+    vault.approveToVault(toVault);
+
     vm.startPrank(alice);
 
     uint256 _amount = 1000e18;
@@ -47,18 +48,23 @@ contract VaultMigrateTest is UnitBaseSetup {
     uint256 _shares = vault.convertToShares(_amount);
 
     vm.expectEmit();
-    emit MigrateToVault(vault, toVault, alice, _amount, _shares);
+    emit MigrateToVault(toVault, alice, _amount, _shares);
 
     vault.redeemToVault(toVault, vault.maxRedeem(alice));
 
-    // assertEq(vault.balanceOf(alice), 0);
-    // assertEq(underlyingAsset.balanceOf(alice), _amount);
+    assertEq(vault.balanceOf(alice), 0);
+    assertEq(toVault.balanceOf(alice), _amount);
 
-    // assertEq(twabController.balanceOf(address(vault), alice), 0);
-    // assertEq(twabController.delegateBalanceOf(address(vault), alice), 0);
+    assertEq(twabController.balanceOf(address(vault), alice), 0);
+    assertEq(twabController.balanceOf(address(toVault), alice), _amount);
 
-    // assertEq(yieldVault.balanceOf(address(vault)), 0);
-    // assertEq(underlyingAsset.balanceOf(address(yieldVault)), 0);
+    assertEq(twabController.delegateBalanceOf(address(vault), alice), 0);
+    assertEq(twabController.delegateBalanceOf(address(toVault), alice), _amount);
+
+    assertEq(yieldVault.balanceOf(address(vault)), 0);
+    assertEq(yieldVault.balanceOf(address(toVault)), _amount);
+
+    assertEq(underlyingAsset.balanceOf(address(yieldVault)), _amount);
 
     vm.stopPrank();
   }

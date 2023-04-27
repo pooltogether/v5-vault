@@ -63,7 +63,7 @@ contract UnitBaseSetup is Test, Helpers {
     underlyingAsset = new ERC20PermitMock("Dai Stablecoin");
     prizeToken = new ERC20PermitMock("PoolTogether");
 
-    twabController = new TwabController();
+    twabController = new TwabController(drawPeriodSeconds);
 
     prizePool = new PrizePoolMock(prizeToken);
 
